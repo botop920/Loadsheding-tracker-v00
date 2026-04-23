@@ -79,7 +79,7 @@ function useCurrentTime() {
   return time;
 }
 
-function TimeSlotPill({ timeStr, currentTime }: { timeStr: string, currentTime: Date }) {
+function TimeSlotPill({ timeStr, currentTime }: { timeStr: string, currentTime: Date, key?: any }) {
   const parsed = parseBanglaHour(timeStr);
   const formattedStr = formatReadableTime(timeStr);
   
@@ -288,7 +288,7 @@ export default function App() {
     e.preventDefault();
     if (!editingItem) return;
     setIsSubmitting(true);
-    const hoursArray = Array.from(activeHoursSet).sort((a,b) => a-b).map(hr => {
+    const hoursArray = Array.from(activeHoursSet).sort((a: number, b: number) => a - b).map((hr: number) => {
       const h1Str = hr < 10 ? '০' + hr.toString() : hr.toString();
       const nextHr = hr === 23 ? 24 : hr + 1;
       const h2Str = nextHr < 10 ? '০' + nextHr.toString() : nextHr.toString();
@@ -450,7 +450,7 @@ export default function App() {
   );
 }
 
-function SheddingCard({ item, isFavorite, onToggleFavorite, currentTime, onEdit }: { item: SheddingData, isFavorite: boolean, onToggleFavorite: () => void, currentTime: Date, onEdit: () => void }) {
+function SheddingCard({ item, isFavorite, onToggleFavorite, currentTime, onEdit }: { item: SheddingData, isFavorite: boolean, onToggleFavorite: () => void, currentTime: Date, onEdit: () => void, key?: any }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const totalLoadShedding = item["shedding hours"].length;
   return (

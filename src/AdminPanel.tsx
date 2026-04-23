@@ -151,7 +151,7 @@ export default function AdminPanel({ appData, setAppData, onClose }: AdminPanelP
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      const files = Array.from(e.target.files);
+      const files = Array.from(e.target.files) as File[];
       setAiFiles(prev => [...prev, ...files]);
       
       files.forEach(file => {

@@ -1,6 +1,6 @@
 import React from 'react';
 import { SheddingData } from '../data';
-import { BarChart2, MapPin, Building2, Clock, zap, AlertCircle, TrendingUp } from 'lucide-react';
+import { BarChart2, MapPin, Building2, Clock, Zap, AlertCircle, TrendingUp } from 'lucide-react';
 
 interface AnalyticsProps {
   data: SheddingData[];
