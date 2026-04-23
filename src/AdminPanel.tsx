@@ -53,15 +53,18 @@ export default function AdminPanel({ appData, setAppData, onClose }: AdminPanelP
     return Array.from(new Set(appData.map(d => d.Office).filter(Boolean))).sort() as string[];
   }, [appData]);
 
-  const filteredData = appData.filter(item => {
-    const matchesSearch = !searchTerm || (
-      item.Office?.toLowerCase().includes(searchTerm.toLowerCase()) || 
-      item["Upokendro name"]?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item["elakar nam"]?.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-    const matchesOffice = selectedOffice === 'all' || item.Office === selectedOffice;
-    return matchesSearch && matchesOffice;
-  });
+  const filteredData = useMemo(() => {
+    const lowerSearch = searchTerm.toLowerCase();
+    return appData.filter(item => {
+      const matchesSearch = !searchTerm || (
+        (item.Office || "").toLowerCase().includes(lowerSearch) || 
+        (item["Upokendro name"] || "").toLowerCase().includes(lowerSearch) ||
+        (item["elakar nam"] || "").toLowerCase().includes(lowerSearch)
+      );
+      const matchesOffice = selectedOffice === 'all' || item.Office === selectedOffice;
+      return matchesSearch && matchesOffice;
+    });
+  }, [appData, searchTerm, selectedOffice]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -5,6 +5,19 @@
   --font-sans: "Noto Sans Bengali", ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
 }
 
+/* Optimization for smooth scrolling and reducing layout shifts */
+.shedding-card {
+  content-visibility: auto;
+  contain-intrinsic-size: 1px 350px;
+  will-change: transform;
+}
+
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
 .marquee-container {
   width: 100%;
   overflow: hidden;

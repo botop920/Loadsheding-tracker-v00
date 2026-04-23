@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { Search, Heart, MapPin, Clock, Zap, Filter, AlertTriangle, ChevronDown, ChevronUp, Home, Info, X, FileJson, Shield, BarChart2 } from 'lucide-react';
 import { SheddingData } from './data';
 import { supabase } from './supabase';
@@ -79,9 +80,9 @@ function useCurrentTime() {
   return time;
 }
 
-function TimeSlotPill({ timeStr, currentTime }: { timeStr: string, currentTime: Date, key?: any }) {
-  const parsed = parseBanglaHour(timeStr);
-  const formattedStr = formatReadableTime(timeStr);
+const TimeSlotPill = React.memo(({ timeStr, currentTime }: { timeStr: string, currentTime: Date }) => {
+  const parsed = useMemo(() => parseBanglaHour(timeStr), [timeStr]);
+  const formattedStr = useMemo(() => formatReadableTime(timeStr), [timeStr]);
   
   if (!parsed) {
     return <span className="bg-neutral-100 text-neutral-800 text-[11px] font-bold px-2 py-1 rounded-md border border-neutral-200">{formattedStr}</span>;
@@ -110,7 +111,7 @@ function TimeSlotPill({ timeStr, currentTime }: { timeStr: string, currentTime: 
   }
   
   if (status === 'active') {
-    const remainTotalSecs = endTotalSecs - currentTotalSecs;
+    const remainTotalSecs = Math.max(0, endTotalSecs - currentTotalSecs);
     const rMins = Math.floor(remainTotalSecs / 60);
     const rSecs = remainTotalSecs % 60;
     
@@ -126,37 +127,40 @@ function TimeSlotPill({ timeStr, currentTime }: { timeStr: string, currentTime: 
   }
   
   const diffMins = startMins - currentTotalMins;
-  if (diffMins <= 30) {
+  if (diffMins <= 30 && diffMins > 0) {
     return (
       <span className="bg-red-100 text-red-800 text-[11px] font-bold px-2 py-1 rounded-md border border-red-300 flex items-center gap-1 shadow-sm">
         🔥 {formattedStr} (আসন্ন)
       </span>
     );
-  } else if (diffMins <= 60) {
+  } else if (diffMins <= 60 && diffMins > 0) {
     return (
       <span className="bg-orange-100 text-orange-800 text-[11px] font-bold px-2 py-1 rounded-md border border-orange-300 flex items-center gap-1">
         ⏳ {formattedStr}
       </span>
     );
-  } else {
+  } else if (status === 'future') {
     return (
       <span className="bg-yellow-50 text-yellow-800 text-[11px] font-bold px-2 py-1 rounded-md border border-yellow-200 flex items-center gap-1 opacity-90">
         🕒 {formattedStr}
       </span>
     );
   }
-}
+  return <span className="bg-neutral-100/50 text-neutral-400 text-[11px] font-bold px-2 py-1 rounded-md border border-neutral-200">{formattedStr}</span>;
+});
 
-function Timeline({ sheddingHoursList, currentTime }: { sheddingHoursList: string[], currentTime: Date }) {
+const Timeline = React.memo(({ sheddingHoursList, currentTime }: { sheddingHoursList: string[], currentTime: Date }) => {
   const currentHour = currentTime.getHours();
-  const sheddingSet = new Set<number>();
-  
-  sheddingHoursList.forEach(t => {
-     const p = parseBanglaHour(t);
-     if (p && !isNaN(p.startHour)) {
-        sheddingSet.add(p.startHour);
-     }
-  });
+  const sheddingSet = useMemo(() => {
+    const set = new Set<number>();
+    sheddingHoursList.forEach(t => {
+       const p = parseBanglaHour(t);
+       if (p && !isNaN(p.startHour)) {
+          set.add(p.startHour);
+       }
+    });
+    return set;
+  }, [sheddingHoursList]);
 
   return (
     <div className="mt-4 border border-neutral-200 rounded-xl p-4 bg-neutral-50/50">
@@ -199,7 +203,7 @@ function Timeline({ sheddingHoursList, currentTime }: { sheddingHoursList: strin
       </div>
     </div>
   );
-}
+});
 
 export default function App() {
   const currentTime = useCurrentTime();
@@ -227,6 +231,7 @@ export default function App() {
   }, []);
 
   const fetchSupabaseData = async () => {
+    if (!supabase) return;
     setLoading(true);
     try {
       const { data, error } = await supabase
@@ -256,13 +261,16 @@ export default function App() {
 
   const offices = useMemo(() => Array.from(new Set(appData.map(item => item.Office).filter(Boolean))).sort() as string[], [appData]);
 
-  const filteredData = appData.filter(item => {
-    const matchesSearch = item["elakar nam"].toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          item["Upokendro name"].toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesOffice = selectedOffice === 'all' || item.Office === selectedOffice;
-    const matchesFavorites = !showFavoritesOnly || favorites.includes(item.id);
-    return matchesSearch && matchesOffice && matchesFavorites;
-  });
+  const filteredData = useMemo(() => {
+    const lowerSearch = searchTerm.toLowerCase();
+    return appData.filter(item => {
+      const matchesSearch = (item["elakar nam"] || "").toLowerCase().includes(lowerSearch) || 
+                            (item["Upokendro name"] || "").toLowerCase().includes(lowerSearch);
+      const matchesOffice = selectedOffice === 'all' || item.Office === selectedOffice;
+      const matchesFavorites = !showFavoritesOnly || favorites.includes(item.id);
+      return matchesSearch && matchesOffice && matchesFavorites;
+    });
+  }, [appData, searchTerm, selectedOffice, showFavoritesOnly, favorites]);
 
   useEffect(() => {
     if (editingItem) {
@@ -297,6 +305,7 @@ export default function App() {
     });
     const updated = { ...editingItem, "shedding hours": hoursArray };
     try {
+      if (!supabase) { alert('সুপাবেস কনফিগার করা নেই!'); setIsSubmitting(false); return; }
       const { error } = await supabase.from('shedding_data').update({
         "elakar nam": updated["elakar nam"],
         "shedding hours": updated["shedding hours"]
@@ -378,23 +387,71 @@ export default function App() {
           </div>
         </div>
 
-        <div className="mb-4 text-neutral-500 font-medium"><p>{toBanglaNum(filteredData.length)} টি এলাকা পাওয়া গেছে</p></div>
+        <div className="mb-4 text-neutral-500 font-medium h-6">
+          {!loading && <p>{toBanglaNum(filteredData.length)} টি এলাকা পাওয়া গেছে</p>}
+        </div>
 
-        {filteredData.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-start">
-            {filteredData.map((item) => (
-              <SheddingCard key={item.id} item={item} isFavorite={favorites.includes(item.id)} onToggleFavorite={() => toggleFavorite(item.id)} currentTime={currentTime} onEdit={() => setEditingItem(item)} />
-            ))}
-          </div>
-        ) : (
-          !loading && (
-            <div className="bg-white rounded-2xl border border-neutral-200 p-12 text-center flex flex-col items-center">
+        <AnimatePresence mode="wait">
+          {loading ? (
+            <motion.div 
+              key="loading-skeleton"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-start"
+            >
+              {[...Array(6)].map((_, i) => (
+                <div key={i} className="bg-white rounded-2xl border border-neutral-200 p-5 shadow-sm h-64 flex flex-col relative overflow-hidden">
+                  <div className="flex justify-between mb-4">
+                    <div className="space-y-2 flex-1">
+                      <div className="h-3 w-20 bg-neutral-100 rounded animate-pulse" />
+                      <div className="h-5 w-32 bg-neutral-200 rounded animate-pulse" />
+                    </div>
+                    <div className="h-10 w-10 bg-neutral-100 rounded-full animate-pulse" />
+                  </div>
+                  <div className="space-y-3 flex-1">
+                    <div className="flex gap-2">
+                       <div className="h-4 w-4 bg-neutral-100 rounded animate-pulse" />
+                       <div className="h-4 w-full bg-neutral-100 rounded animate-pulse" />
+                    </div>
+                    <div className="h-4 w-3/4 bg-neutral-100 rounded animate-pulse ml-6" />
+                  </div>
+                  <div className="mt-auto space-y-3">
+                    <div className="flex justify-between">
+                       <div className="h-4 w-12 bg-neutral-100 rounded animate-pulse" />
+                       <div className="h-4 w-16 bg-neutral-200 rounded animate-pulse" />
+                    </div>
+                    <div className="h-12 w-full bg-neutral-50 rounded-xl animate-pulse" />
+                  </div>
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent -translate-x-full animate-[shimmer_2s_infinite]" />
+                </div>
+              ))}
+            </motion.div>
+          ) : filteredData.length > 0 ? (
+            <motion.div 
+              key="data-grid"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.4 }}
+              className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-start"
+            >
+              {filteredData.map((item) => (
+                <SheddingCard key={item.id} item={item} isFavorite={favorites.includes(item.id)} onToggleFavorite={() => toggleFavorite(item.id)} currentTime={currentTime} onEdit={() => setEditingItem(item)} />
+              ))}
+            </motion.div>
+          ) : (
+            <motion.div 
+              key="not-found"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-white rounded-2xl border border-neutral-200 p-12 text-center flex flex-col items-center"
+            >
               <AlertTriangle className="h-12 w-12 text-amber-500 mb-4 opacity-80" />
               <h3 className="text-xl font-bold text-neutral-900 mb-2">কোনো তথ্য পাওয়া যায়নি</h3>
               <p className="text-neutral-500">অন্য কোনো এলাকার নাম দিয়ে খুঁজুন অথবা ফিল্টার পরিবর্তন করুন।</p>
-            </div>
-          )
-        )}
+            </motion.div>
+          )}
+        </AnimatePresence>
       </main>
 
       {showAdminLogin && (
@@ -410,10 +467,13 @@ export default function App() {
               <button 
                 onClick={async () => {
                   setLoginError('');
-                  if (adminId === 'admin' && adminPass === '1234') {
+                  const defaultAdmin = import.meta.env.VITE_ADMIN_ID || 'admin';
+                  const defaultPass = import.meta.env.VITE_ADMIN_PASS || '1234';
+                  if (adminId === defaultAdmin && adminPass === defaultPass) {
                     setShowAdminLogin(false); setIsAdminView(true); setAdminId(''); setAdminPass(''); return;
                   }
                   try {
+                    if (!supabase) { setLoginError('সুপাবেস কনফিগার করা নেই!'); return; }
                     const { data, error } = await supabase.from('admins').select('*').eq('username', adminId).eq('password', adminPass).single();
                     if (data) { setShowAdminLogin(false); setIsAdminView(true); setAdminId(''); setAdminPass(''); }
                     else setLoginError('ভুল আইডি বা পাসওয়ার্ড!');
@@ -450,29 +510,59 @@ export default function App() {
   );
 }
 
-function SheddingCard({ item, isFavorite, onToggleFavorite, currentTime, onEdit }: { item: SheddingData, isFavorite: boolean, onToggleFavorite: () => void, currentTime: Date, onEdit: () => void, key?: any }) {
+const SheddingCard = React.memo(({ item, isFavorite, onToggleFavorite, currentTime, onEdit }: { item: SheddingData, isFavorite: boolean, onToggleFavorite: () => void, currentTime: Date, onEdit: () => void, key?: any }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const totalLoadShedding = item["shedding hours"].length;
+  
+  const toggleInternalFavorite = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onToggleFavorite();
+  };
+
+  const toggleInternalEdit = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onEdit();
+  };
+
   return (
-    <div className="bg-white rounded-2xl border border-neutral-200 overflow-hidden shadow-sm flex flex-col h-full">
-      <div className="p-5 bg-neutral-50 border-b flex justify-between items-start">
-        <div><div className="text-xs font-bold text-amber-600 mb-1">{item.Office}</div><h3 className="font-bold text-lg">{item["Upokendro name"]}</h3></div>
-        <div className="flex flex-col gap-2">
-          <button onClick={onToggleFavorite} className={`p-2 rounded-full ${isFavorite ? 'text-amber-600' : 'text-neutral-400'}`}><Home className={`h-6 w-6 ${isFavorite ? 'fill-amber-600' : ''}`} /></button>
-          <button onClick={onEdit} className="p-2 rounded-full text-neutral-400 hover:text-blue-600"><Shield className="h-5 w-5" /></button>
+    <div className="shedding-card bg-white rounded-2xl border border-neutral-200 overflow-hidden shadow-sm flex flex-col h-full transform-gpu transition-all hover:shadow-md">
+      <div className="p-5 bg-neutral-50/50 border-b flex justify-between items-start">
+        <div className="flex-1 min-w-0">
+          <div className="text-[10px] font-black text-amber-600 mb-1 uppercase tracking-wider">{item.Office}</div>
+          <h3 className="font-bold text-lg text-neutral-800 truncate" title={item["Upokendro name"]}>{item["Upokendro name"]}</h3>
+        </div>
+        <div className="flex items-center gap-1">
+          <button onClick={toggleInternalFavorite} className={`p-2 rounded-xl hover:bg-amber-100 transition-colors ${isFavorite ? 'text-amber-600 bg-amber-50' : 'text-neutral-400 bg-neutral-100'}`} aria-label="Favorite">
+            <Home className={`h-5 w-5 ${isFavorite ? 'fill-amber-600' : ''}`} />
+          </button>
+          <button onClick={toggleInternalEdit} className="p-2 rounded-xl text-neutral-400 bg-neutral-100 hover:bg-blue-50 hover:text-blue-600 transition-colors" aria-label="Edit">
+            <Shield className="h-5 w-5" />
+          </button>
         </div>
       </div>
       <div className="p-5 flex-1 flex flex-col">
-        {item.feeder_no && <div className="mb-3"><span className="bg-indigo-50 text-indigo-700 text-xs font-bold px-2 py-1 rounded-full flex items-center gap-1 w-fit"><Zap className="h-3 w-3" /> {item.feeder_no}</span></div>}
-        <div className="flex gap-3 mb-4"><MapPin className="h-5 w-5 text-neutral-400 shrink-0" /><p className="text-sm">{item["elakar nam"]}</p></div>
+        {item.feeder_no && <div className="mb-3"><span className="bg-indigo-50 text-indigo-700 text-[10px] font-black px-2 py-1 rounded-lg flex items-center gap-1 w-fit uppercase border border-indigo-100"><Zap className="h-3 w-3" /> {item.feeder_no}</span></div>}
+        <div className="flex gap-3 mb-4"><MapPin className="h-4 w-4 text-neutral-400 mt-1 shrink-0" /><p className="text-[13px] leading-relaxed text-neutral-600 line-clamp-3">{item["elakar nam"]}</p></div>
         <div className="mt-auto">
-          <div className="flex justify-between items-center mb-3"><div className="flex items-center gap-2 font-semibold"><Clock className="h-4 w-4 text-amber-500" /> সূচি</div>{totalLoadShedding > 0 && <span className="text-xs font-bold bg-red-50 text-red-600 px-2 py-1 rounded">মোট: {toBanglaNum(totalLoadShedding)} ঘণ্টা</span>}</div>
-          <div className={`flex flex-wrap gap-2 overflow-hidden ${!isExpanded ? 'max-h-[85px]' : ''}`}>{item["shedding hours"].map((t, idx) => <TimeSlotPill key={idx} timeStr={t} currentTime={currentTime} />)}</div>
+          <div className="flex justify-between items-center mb-3">
+            <div className="flex items-center gap-2 font-bold text-neutral-700 text-xs uppercase tracking-tight">
+              <Clock className="h-3.5 w-3.5 text-amber-500" /> সূচি
+            </div>
+            {totalLoadShedding > 0 && <span className="text-[10px] font-black bg-red-50 text-red-600 px-2 py-0.5 rounded-full border border-red-100">মোট: {toBanglaNum(totalLoadShedding)} ঘণ্টা</span>}
+          </div>
+          <div className={`flex flex-wrap gap-1.5 overflow-hidden transition-all duration-300 ${!isExpanded ? 'max-h-[75px]' : 'max-h-[500px]'}`}>
+            {item["shedding hours"].map((t, idx) => <TimeSlotPill key={`${item.id}-${idx}`} timeStr={t} currentTime={currentTime} />)}
+          </div>
           {isExpanded && <Timeline sheddingHoursList={item["shedding hours"]} currentTime={currentTime} />}
-          <button onClick={() => setIsExpanded(!isExpanded)} className="mt-4 w-full py-2 bg-neutral-50 border rounded-lg text-xs font-bold flex items-center justify-center gap-1">{isExpanded ? <>সংক্ষিপ্ত <ChevronUp className="h-4 w-4"/></> : <>বিস্তারিত <ChevronDown className="h-4 w-4"/></>}</button>
+          <button onClick={() => setIsExpanded(!isExpanded)} className="mt-4 w-full py-2.5 bg-neutral-50 hover:bg-neutral-100 border border-neutral-200 rounded-xl text-[11px] font-black uppercase tracking-wider text-neutral-600 flex items-center justify-center gap-2 transition-colors">
+            {isExpanded ? <><ChevronUp className="h-4 w-4"/> সংক্ষিপ্ত</> : <>বিস্তারিত <ChevronDown className="h-4 w-4"/></>}
+          </button>
         </div>
       </div>
-      <div className="px-5 py-3 bg-neutral-50 border-t text-xs flex justify-between items-center"><span>লোড: {item.mw} MW</span>{item.original_pdf && <div className="text-indigo-600 truncate max-w-[100px]">{item.original_pdf}</div>}</div>
+      <div className="px-5 py-3 bg-neutral-50 border-t text-[10px] font-bold text-neutral-500 flex justify-between items-center">
+        <span className="flex items-center gap-1.5"><Zap className="h-3 w-3 text-amber-500"/> লোড: {item.mw || '০'} MW</span>
+        {item.original_pdf && <div className="text-indigo-600 truncate max-w-[100px] bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100">{item.original_pdf}</div>}
+      </div>
     </div>
   );
-}
+});
